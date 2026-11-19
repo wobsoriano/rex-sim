@@ -11,7 +11,9 @@ Pick any simulator or emulator on your Mac and use it right in Rex. Run your mob
 - **Press its buttons.** Home, Lock, the volume keys, Rotate and the iOS on-screen keyboard are actions in the command palette, so you can bind them to keys.
 - **Switch devices.** Click the device name at the bottom left, or press Ctrl-P. Rex's command palette lists every iOS simulator and Android emulator on your Mac, running ones first, and you type to filter. Pick one that's off and it starts. From anywhere in the window, **Simulator: Pick Device** does the same, and opens a pane if none is open. Android emulators run without a window of their own.
 - **Show two at once.** Each pane has its own device, so an iPhone and an Android emulator can run side by side. A new pane starts on the device you picked last.
-- **Fix stuck taps.** On Xcode 27, taps on a simulator sometimes stop working. **Simulator: Repair Input** fixes them. It restarts SpringBoard, so open apps close.
+- **Open a link.** **Simulator: Open URL** asks for a URL in the command palette and opens it on the device. A web page opens in the browser, and an app's own link, such as `myapp://settings`, opens the app.
+- **Keep an eye on it from another tab.** The pane reports what it's doing to Rex, which shows a spinner on its tab while the device boots or connects. Lua scripts hear it as `terminal.program_status_changed`.
+- **Fix stuck taps.** On Xcode 27, taps on a simulator sometimes stop working. **Simulator: Repair Input** fixes them. It restarts SpringBoard, so open apps close, and it asks first.
 
 ## Install
 
@@ -62,7 +64,8 @@ These actions work from anywhere in the window, under Simulator in the command p
 | `sim_volume_up`, `sim_volume_down` | Presses a volume key. |
 | `sim_rotate` | Rotates the device a quarter turn. |
 | `sim_keyboard` | Shows or hides the iOS on-screen keyboard. |
-| `sim_repair` | Repairs input on an iOS simulator. |
+| `sim_open_url` | Opens a URL on the device. Takes `url`, and asks for it without one. |
+| `sim_repair` | Repairs input on an iOS simulator, after asking. |
 
 A device is a simulator's UDID, from `xcrun simctl list devices`, or `avd:` and an emulator's name, such as `avd:Pixel_3a_API_36`.
 
@@ -77,7 +80,7 @@ A device is a simulator's UDID, from `xcrun simctl list devices`, or `avd:` and 
 | `device` | none | The device a new pane starts on. Without it, the one you picked last, else the first running one. |
 | `keys` | `{}` | Keys for actions, such as `{ toggle = "cmd+shift+s", home = "cmd+shift+h" }`. |
 
-You can also run the pane in any Rex terminal with `node bin/rex-sim.mjs`, and `--device` to pick the device. `--list` prints every device as JSON.
+You can also run the pane in any Rex terminal with `node bin/rex-sim.mjs`, and `--device` to pick the device. While it runs, the terminal is labelled `rex-sim`, so the actions above find it, and it gets its old label back when you quit. `--list` prints every device as JSON.
 
 ## What it runs on your Mac
 

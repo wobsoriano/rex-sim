@@ -7,17 +7,25 @@ import { parseArgs } from "node:util";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-const { values: opts } = parseArgs({ options: { device: { type: "string", short: "d" }, help: { type: "boolean", short: "h" } } });
+const { values: opts } = parseArgs({
+  options: { device: { type: "string", short: "d" }, list: { type: "boolean" }, help: { type: "boolean", short: "h" } },
+});
 if (opts.help) {
-  console.log(`Usage: rex-sim [--device ID]
+  console.log(`Usage: rex-sim [--device ID] | --list
 
 Shows an iOS simulator or Android emulator in this terminal. Click to tap, drag
 to swipe, scroll, and type. Ctrl-P picks a device, Ctrl-C quits.
 
 --device  a simulator's UDID or avd:<name> for an emulator. Without it, the
           device picked last, else the first running one.
+--list    print every simulator and emulator as JSON, and exit.
 
 Needs a terminal with Kitty graphics and pixel mouse reporting, such as Rex.`);
+  process.exit(0);
+}
+if (opts.list) {
+  const { listDevices } = await import("../src/devices.mjs");
+  console.log(JSON.stringify(await listDevices()));
   process.exit(0);
 }
 if (!process.stdin.isTTY || !process.stdout.isTTY) {

@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { canRepair, listDevices, platformOf } from "./devices.mjs";
 import { imageSize } from "./frames.mjs";
 import { keyUsage } from "./keys.mjs";
-import { enter, leave, requestMetrics, InputParser, Screen } from "./terminal.mjs";
+import { enter, leave, programStatus, requestMetrics, InputParser, Screen } from "./terminal.mjs";
 import { fraction, hit, layout, render } from "./view.mjs";
 
 // The device picked last in any pane, where a new pane starts.
@@ -18,6 +18,16 @@ const EDGE_BOTTOM = 3;
 const WHEEL_STEP = 0.03;
 // The screen's rounded corners, as a share of its width.
 const CORNER = 0.13;
+
+// What the pane reports to Rex in each view, as [state, message].
+const STATUS = {
+  empty: () => ["idle", "Pick a device"],
+  connecting: (v) => ["working", `Connecting to ${v.device.name}`],
+  booting: (v) => ["working", `Booting ${v.device.name}`],
+  streaming: (v) => ["idle", `${v.session.device.name} · ${v.session.device.os}`],
+  message: (v) => ["idle", v.text],
+  error: (v) => ["error", v.text],
+};
 
 const clamp = (p) => ({ x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) });
 const OUTSIDE_REX = "outside Rex, start rex-sim with --device";
@@ -71,6 +81,7 @@ export async function run({ device: deviceArg }) {
   let mask = null;
   let wakeLoop = null;
   let wakeDraw = null;
+  let status = null;
 
   // This pane's device: the one picked here or passed in, else the first running one.
   const target = () => devices.find((d) => d.id === choice) ?? devices.find((d) => d.booted) ?? null;
@@ -88,6 +99,8 @@ export async function run({ device: deviceArg }) {
   function show(next) {
     view = next;
     gesture = null;
+    const report = programStatus(...STATUS[view.kind](view));
+    if (report !== status && !quitting) process.stdout.write((status = report));
     redraw();
   }
 
@@ -255,6 +268,7 @@ export async function run({ device: deviceArg }) {
     if (quitting) return;
     quitting = true;
     stopStream();
+    process.stdout.write(programStatus("clear"));
     leave();
     const prefix = `tty-graphics-protocol-rex-sim-${process.pid}-`;
     for (const name of await readdir("/tmp")) if (name.startsWith(prefix)) await rm(`/tmp/${name}`, { force: true });

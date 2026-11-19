@@ -26,6 +26,17 @@ export function requestMetrics() {
   out.write(`${ESC}[16t`);
 }
 
+// OSC 7501, the program status Rex shows on the pane's tab. Rex drops a report
+// whose msg has control characters or decodes past 2048 bytes.
+export function programStatus(state, msg) {
+  const pairs = [`state=${state}`, "app=rex-sim"];
+  if (msg) {
+    const text = [...msg.replace(/[\x00-\x1f\x7f-\x9f]+/g, " ")].slice(0, 512).join("");
+    pairs.push(`msg=${Buffer.from(text).toString("base64")}`);
+  }
+  return `${ESC}]7501;${pairs.join(":")}${ESC}\\`;
+}
+
 const NAMED = { A: "up", B: "down", C: "right", D: "left", H: "home", F: "end" };
 const TILDE = { 1: "home", 3: "delete", 4: "end", 5: "pageup", 6: "pagedown", 7: "home", 8: "end" };
 // What a chunk may end with partway through a sequence.

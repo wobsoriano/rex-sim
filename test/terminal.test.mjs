@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { InputParser } from "../src/terminal.mjs";
+import { InputParser, programStatus } from "../src/terminal.mjs";
 
 const parse = (...chunks) => {
   const parser = new InputParser();
@@ -50,4 +50,27 @@ test("terminal replies: cell size and graphics errors; other replies are dropped
 
 test("Alt-letter does not swallow later input", () => {
   assert.deepEqual(parse("\x1bx", "y").map((e) => e.key), ["\x1b", "x", "y"]);
+});
+
+const decode = (report) => {
+  const m = /^\x1b\]7501;(.*)\x1b\\$/.exec(report);
+  return Object.fromEntries(m[1].split(":").map((pair) => pair.split("=", 2)));
+};
+const text = (b64) => Buffer.from(b64, "base64").toString("utf8");
+
+test("program status: state and app, with msg as base64 UTF-8", () => {
+  const pairs = decode(programStatus("idle", "iPhone 17 · iOS 27.2"));
+  assert.deepEqual(Object.keys(pairs), ["state", "app", "msg"]);
+  assert.equal(pairs.state, "idle");
+  assert.equal(pairs.app, "rex-sim");
+  assert.equal(text(pairs.msg), "iPhone 17 · iOS 27.2");
+  assert.match(pairs.msg, /^[A-Za-z0-9+\/=]+$/);
+  assert.deepEqual(decode(programStatus("clear")), { state: "clear", app: "rex-sim" });
+});
+
+test("program status: msg is one line within Rex's 2048 bytes", () => {
+  assert.equal(text(decode(programStatus("error", "serve-sim:\n\tfailed\x1b")).msg), "serve-sim: failed ");
+  const long = decode(programStatus("error", "😀".repeat(1000))).msg;
+  assert.ok(Buffer.from(long, "base64").length <= 2048);
+  assert.ok(long.length <= 2732);
 });

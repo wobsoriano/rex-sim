@@ -56,6 +56,9 @@ export async function run({ device: deviceArg }) {
   let gesture = null;
   let paused = false;
   let repairing = null;
+  // The device a pane opens on boots if it's off. One that shuts down later
+  // stays off until it's picked, so rex-sim never fights you.
+  let opened = false;
   let quitting = false;
   // The newest frame not yet drawn, and the last one that arrived, to draw
   // again after a resize or a message covered the screen.
@@ -110,16 +113,19 @@ export async function run({ device: deviceArg }) {
     }
   }
 
+  async function boot(device) {
+    if (booting.has(device.id)) return;
+    booting.add(device.id);
+    show({ kind: "booting", device });
+    await platformOf(device).boot(device).catch((e) => show({ kind: "error", text: e.message }));
+  }
+
   async function pick(device) {
     choice = device.id;
     stopStream();
     redraw();
     mkdir(STATE_DIR, { recursive: true }).then(() => writeFile(LAST_DEVICE, device.id)).catch(() => {});
-    if (!device.booted && !booting.has(device.id)) {
-      booting.add(device.id);
-      show({ kind: "booting", device });
-      await platformOf(device).boot(device).catch((e) => show({ kind: "error", text: e.message }));
-    }
+    if (!device.booted) await boot(device);
     nudge();
   }
 
@@ -311,8 +317,11 @@ export async function run({ device: deviceArg }) {
           await rest(2000);
           continue;
         }
+        const opening = !opened;
+        opened = true;
         if (!device.booted) {
-          show(booting.has(device.id) ? { kind: "booting", device } : { kind: "message", text: `${device.name} is shut down. Pick it again to boot it.` });
+          if (opening && !device.unusable) await boot(device);
+          show(booting.has(device.id) ? { kind: "booting", device } : { kind: "message", text: `${device.name} is shut down. Press Ctrl-P and pick it to boot it.` });
           await rest(1000);
           continue;
         }

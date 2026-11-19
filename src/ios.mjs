@@ -42,6 +42,12 @@ export async function bootSimulator(device) {
   await run("xcrun", ["simctl", "boot", device.id]);
 }
 
+export async function openSimulatorUrl(device, url) {
+  await run("xcrun", ["simctl", "openurl", device.id, url]).catch((e) => {
+    throw new Error(/^Simulator .*$/m.exec(e.stderr)?.[0] ?? `couldn't open ${url}`);
+  });
+}
+
 // For when taps do nothing: repairs Device Hub input, which restarts
 // SpringBoard. A running serve-sim keeps the input it opened before, so it
 // goes too.

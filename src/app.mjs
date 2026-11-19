@@ -75,8 +75,8 @@ export async function run({ device: deviceArg }) {
   let latest = null;
   let last = null;
   let notice = null;
-  // Why the last pick failed, shown until a device is picked.
-  let pickNotice = null;
+  // Why the last device pick or URL failed, shown until the next one.
+  let failure = null;
   let picking = false;
   let mask = null;
   let wakeLoop = null;
@@ -117,7 +117,7 @@ export async function run({ device: deviceArg }) {
 
   function redraw() {
     if (!geometry || paused || quitting) return;
-    const chrome = render({ view, device: target(), notice: pickNotice ?? notice }, geometry, actions);
+    const chrome = render({ view, device: target(), notice: failure ?? notice }, geometry, actions);
     regions = chrome.regions;
     screen.drawChrome(chrome, geometry);
     if (chrome.area === null && !screen.shown.frames && last && last.session === view.session) {
@@ -146,7 +146,7 @@ export async function run({ device: deviceArg }) {
   function pickDevice() {
     if (picking) return;
     const fail = (text) => {
-      pickNotice = text;
+      failure = text;
       redraw();
     };
     if (!process.env.REX_BLOCK) return fail(OUTSIDE_REX);
@@ -180,8 +180,14 @@ export async function run({ device: deviceArg }) {
       stopStream();
       nudge();
     },
+    "open-url": async (url) => {
+      const d = target();
+      failure = d?.booted ? null : "no running device to open the URL on";
+      if (d?.booted) await platformOf(d).openUrl(d, url).catch((e) => (failure = e.message));
+      redraw();
+    },
     device: async (id) => {
-      pickNotice = null;
+      failure = null;
       devices = await listDevices();
       const d = devices.find((d) => d.id === id);
       if (!d) show({ kind: "error", text: `No device with id ${id}.` });

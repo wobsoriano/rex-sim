@@ -57,9 +57,14 @@ async function serialOf(avd) {
   return null;
 }
 
-export async function startEmulator(device) {
+async function connected(device) {
   const serial = await serialOf(device.avd);
   if (!serial) throw new Error(`${device.name} has no adb connection yet`);
+  return serial;
+}
+
+export async function startEmulator(device) {
+  const serial = await connected(device);
   const m = /(\d+)x(\d+)/.exec((await adb(serial, ["shell", "wm", "size"])).stdout);
   const size = m ? { width: Number(m[1]), height: Number(m[2]) } : { width: 1080, height: 2220 };
   const port = await startStream(serial);
@@ -70,6 +75,15 @@ export async function startEmulator(device) {
     input: new AdbInput(serial, size),
     close: () => abort.abort(),
   };
+}
+
+export async function openEmulatorUrl(device, url) {
+  const serial = await connected(device);
+  // adb joins shell arguments into one command line, so the URL is quoted for it.
+  const quoted = `'${url.replaceAll("'", `'\\''`)}'`;
+  await adb(serial, ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", quoted]).catch((e) => {
+    throw new Error(/^Error: (.*)$/m.exec(e.stderr)?.[1] ?? `couldn't open ${url}`);
+  });
 }
 
 const STREAM = fileURLToPath(new URL("./android-stream.mjs", import.meta.url));

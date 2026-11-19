@@ -1,11 +1,11 @@
-import { bootEmulator, listEmulators, startEmulator } from "./android.mjs";
-import { bootSimulator, listSimulators, repairInput, startSimulator } from "./ios.mjs";
+import { bootEmulator, listEmulators, openEmulatorUrl, startEmulator } from "./android.mjs";
+import { bootSimulator, listSimulators, openSimulatorUrl, repairInput, startSimulator } from "./ios.mjs";
 
 // Listed in this order. `start` opens a session: the device, a
 // stream of its frames (JPEG or PNG) and its input. `repair` is optional.
 export const PLATFORMS = [
-  { id: "android", list: listEmulators, boot: bootEmulator, start: startEmulator },
-  { id: "ios", list: listSimulators, boot: bootSimulator, start: startSimulator, repair: repairInput },
+  { id: "android", list: listEmulators, boot: bootEmulator, start: startEmulator, openUrl: openEmulatorUrl },
+  { id: "ios", list: listSimulators, boot: bootSimulator, start: startSimulator, openUrl: openSimulatorUrl, repair: repairInput },
 ];
 
 export const platformOf = (device) => PLATFORMS.find((p) => p.id === device.platform);

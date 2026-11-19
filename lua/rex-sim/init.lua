@@ -186,14 +186,39 @@ function M.pick(ctx)
   return { block_id = pane.block_id, device = id }
 end
 
+local function open_pane(ctx)
+  return locate(ctx) or fail("no simulator pane is open; run Simulator: Toggle first")
+end
+
 -- Sends a command to the pane from wherever you are.
 local function command_action(command)
   return function(ctx)
-    local pane = locate(ctx)
-    if not pane then fail("no simulator pane is open; run Simulator: Toggle first") end
+    local pane = open_pane(ctx)
     send(pane.block_id, command)
     return { block_id = pane.block_id }
   end
+end
+
+-- Opens a URL on the pane's device, asking for it in the command palette when
+-- it isn't given.
+function M.open_url(ctx, args)
+  local pane = open_pane(ctx)
+  local url = args and args.url
+  if url == nil then
+    if not (rex.ui and rex.ui.input) then fail("needs Rex 2042+ to ask for a URL; pass url=") end
+    local why, detail
+    url, why, detail = rex.ui.input{ title = "Open URL on the simulator", placeholder = "https://… or myapp://…", confirm = "Open" }
+    if url == nil then
+      if why == "cancelled" then return end
+      fail("couldn't ask for a URL: " .. (detail or why))
+    end
+  end
+  url = url:match("^%s*(.-)%s*$")
+  if url == "" then return end
+  -- The URL ends the command sequence it travels in at a control character.
+  if url:find("%c") then fail("a URL can't contain control characters") end
+  send(pane.block_id, "open-url;" .. url)
+  return { block_id = pane.block_id, url = url }
 end
 
 function M.setup(opts)
@@ -231,6 +256,9 @@ function M.setup(opts)
   action("sim_volume_up", "Simulator: Volume Up", "Press the device's volume up button.", command_action("volume-up"))
   action("sim_volume_down", "Simulator: Volume Down", "Press the device's volume down button.", command_action("volume-down"))
   action("sim_rotate", "Simulator: Rotate", "Rotate the device a quarter turn.", command_action("rotate"))
+  action("sim_open_url", "Simulator: Open URL",
+    "Open a web page or an app's link, such as myapp://, on the device.",
+    function(ctx, args) return M.open_url(ctx, args) end, { url = "string?" })
   action("sim_keyboard", "Simulator: Toggle Software Keyboard", "Show or hide the iOS on-screen keyboard.", command_action("keyboard"))
   action("sim_repair", "Simulator: Repair Input",
     "For when taps on an iOS simulator do nothing. Restarts SpringBoard, so open apps close.", command_action("repair"))

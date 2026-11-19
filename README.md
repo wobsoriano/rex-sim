@@ -9,13 +9,13 @@ Pick any simulator or emulator on your Mac and use it right in Rex. Run your mob
 - **See the device live.** The screen updates up to about 40 times a second while it moves.
 - **Use it in place.** Click to tap, drag to swipe, scroll with your mouse or trackpad, and type with your keyboard. A drag that starts at the bottom edge of an iPhone goes home, as on the phone.
 - **Press its buttons.** Home, Lock, the volume keys, Rotate and the iOS on-screen keyboard are actions in the command palette, so you can bind them to keys.
-- **Switch devices.** Click the device name at the bottom left, or press Ctrl-P. The picker lists every iOS simulator and Android emulator on your Mac, with the running ones marked green. Pick one that's off and it starts. Android emulators run without a window of their own.
+- **Switch devices.** Click the device name at the bottom left, or press Ctrl-P. Rex's command palette lists every iOS simulator and Android emulator on your Mac, running ones first, and you type to filter. Pick one that's off and it starts. From anywhere in the window, **Simulator: Pick Device** does the same, and opens a pane if none is open. Android emulators run without a window of their own.
 - **Show two at once.** Each pane has its own device, so an iPhone and an Android emulator can run side by side. A new pane starts on the device you picked last.
-- **Fix stuck taps.** On Xcode 27, taps on a simulator sometimes stop working. Repair input, at the bottom of the picker, fixes them. It restarts SpringBoard, so open apps close.
+- **Fix stuck taps.** On Xcode 27, taps on a simulator sometimes stop working. **Simulator: Repair Input** fixes them. It restarts SpringBoard, so open apps close.
 
 ## Install
 
-You need macOS, Xcode with at least one simulator, and Node 22 or later. For Android you also need the Android SDK and an emulator image built for your Mac's chip.
+You need macOS, Rex build 2042 or later, Xcode with at least one simulator, and Node 22 or later. If you just updated Rex, restart it so its server runs the new build, or the device picker won't open. For Android you also need the Android SDK and an emulator image built for your Mac's chip.
 
 With [Amber](https://github.com/rawnly/amber), add rex-sim to your plugins in `~/.config/rex/init.lua`:
 
@@ -47,7 +47,7 @@ Then run `rex config reload`. The first time the pane opens, it installs its one
 
 Press your toggle key, or run **Simulator: Toggle** from the command palette. It opens a pane beside the focused one. Run it again to close the pane.
 
-In the pane, Ctrl-P opens the picker, where the arrow keys or j and k move, Enter picks and Escape closes. Ctrl-C closes the pane. Every other key goes to the device.
+In the pane, Ctrl-P opens the device picker in Rex's command palette. Ctrl-C closes the pane. Every other key goes to the device.
 
 These actions work from anywhere in the window, under Simulator in the command palette. Add any of them to `keys` by the part after `sim_`.
 
@@ -56,7 +56,7 @@ These actions work from anywhere in the window, under Simulator in the command p
 | `sim_toggle` | Opens the pane, or closes it. A floating pane is hidden instead, and stops streaming while hidden. |
 | `sim_open` | Opens another pane. Takes `device` and `placement`. |
 | `sim_close` | Closes the pane. |
-| `sim_devices` | Opens the picker. |
+| `sim_devices` | Picks a device in the command palette and shows it, opening a pane if none is open. |
 | `sim_device` | Shows a device, booting it if it's off. Takes `device`. |
 | `sim_home`, `sim_lock` | Presses Home or Lock. |
 | `sim_volume_up`, `sim_volume_down` | Presses a volume key. |
@@ -77,7 +77,7 @@ A device is a simulator's UDID, from `xcrun simctl list devices`, or `avd:` and 
 | `device` | none | The device a new pane starts on. Without it, the one you picked last, else the first running one. |
 | `keys` | `{}` | Keys for actions, such as `{ toggle = "cmd+shift+s", home = "cmd+shift+h" }`. |
 
-You can also run the pane in any Rex terminal with `node bin/rex-sim.mjs`, and `--device` to pick the device.
+You can also run the pane in any Rex terminal with `node bin/rex-sim.mjs`, and `--device` to pick the device. `--list` prints every device as JSON.
 
 ## What it runs on your Mac
 
@@ -89,7 +89,7 @@ rex-sim sends nothing over the internet itself.
 
 ## Limits
 
-- It works on macOS only. It's tested with Rex 1853, Xcode 27 and Android emulator 37.2.
-- Rex shows pictures only through the Kitty graphics protocol, so the pane must be a Rex terminal, or another terminal that draws Kitty graphics and reports the mouse in pixels.
+- It works on macOS only. It's tested with Xcode 27 and Android emulator 37.2.
+- Rex shows pictures only through the Kitty graphics protocol, so the pane must be a Rex terminal, or another terminal that draws Kitty graphics and reports the mouse in pixels. Outside Rex the device picker can't open, so start rex-sim with `--device`.
 - Of the shortcuts, only Ctrl with a letter reaches the device, and on Android it types just the letter.
 - On a Rex without minimized floating panes, Simulator: Toggle closes a floating pane instead of hiding it.

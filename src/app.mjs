@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import sharp from "sharp";
@@ -5,7 +6,7 @@ import { canRepair, listDevices, platformOf } from "./devices.mjs";
 import { imageSize } from "./frames.mjs";
 import { keyUsage } from "./keys.mjs";
 import { enter, leave, requestMetrics, InputParser, Screen } from "./terminal.mjs";
-import { firstCursor, fraction, hit, layout, moveCursor, pickerEntries, render } from "./view.mjs";
+import { fraction, hit, layout, render } from "./view.mjs";
 
 // The device picked last in any pane, where a new pane starts.
 const STATE_DIR = `${process.env.XDG_STATE_HOME || `${homedir()}/.local/state`}/rex-sim`;
@@ -19,7 +20,7 @@ const WHEEL_STEP = 0.03;
 const CORNER = 0.13;
 
 const clamp = (p) => ({ x: Math.min(1, Math.max(0, p.x)), y: Math.min(1, Math.max(0, p.y)) });
-const mix = (a, b, t) => a.map((v, i) => Math.round(v * t + b[i] * (1 - t)));
+const OUTSIDE_REX = "outside Rex, start rex-sim with --device";
 
 // The pixels of a rounded corner that are partly or wholly outside it, as
 // byte offsets of their alpha in an RGBA image, with their alpha.
@@ -47,10 +48,8 @@ export async function run({ device: deviceArg }) {
   let choice = deviceArg ?? (await readFile(LAST_DEVICE, "utf8").then((s) => s.trim(), () => null));
   let devices = [];
   let view = { kind: "empty" };
-  let picker = null;
-  // The terminal's cell size and colors, once it answers.
+  // The terminal's cell size, once it answers.
   let metrics = null;
-  let colors = { foreground: [200, 200, 200], background: [0, 0, 0] };
   let frameSize = null;
   let geometry = null;
   let regions = [];
@@ -59,10 +58,13 @@ export async function run({ device: deviceArg }) {
   let repairing = null;
   let quitting = false;
   // The newest frame not yet drawn, and the last one that arrived, to draw
-  // again after the picker or a resize covered the screen.
+  // again after a resize or a message covered the screen.
   let latest = null;
   let last = null;
   let notice = null;
+  // Why the last pick failed, shown until a device is picked.
+  let pickNotice = null;
+  let picking = false;
   let mask = null;
   let wakeLoop = null;
   let wakeDraw = null;
@@ -99,8 +101,7 @@ export async function run({ device: deviceArg }) {
 
   function redraw() {
     if (!geometry || paused || quitting) return;
-    const selection = `48;2;${mix(colors.foreground, colors.background, 0.16).join(";")}`;
-    const chrome = render({ view, picker, device: target(), notice, selection }, geometry, actions);
+    const chrome = render({ view, device: target(), notice: pickNotice ?? notice }, geometry, actions);
     regions = chrome.regions;
     screen.drawChrome(chrome, geometry);
     if (chrome.area === null && !screen.shown.frames && last && last.session === view.session) {
@@ -110,7 +111,6 @@ export async function run({ device: deviceArg }) {
   }
 
   async function pick(device) {
-    picker = null;
     choice = device.id;
     stopStream();
     redraw();
@@ -123,23 +123,29 @@ export async function run({ device: deviceArg }) {
     nudge();
   }
 
-  function repair(device) {
-    picker = null;
-    repairing = device.id;
-    stopStream();
-    nudge();
-  }
-
-  async function openPicker() {
-    const current = target();
-    let entries = pickerEntries(devices, current);
-    picker = { devices, cursor: firstCursor(entries, current) };
-    redraw();
-    const fresh = await listDevices();
-    if (!picker) return;
-    entries = pickerEntries(fresh, current);
-    picker = { devices: fresh, cursor: firstCursor(entries, current) };
-    redraw();
+  // Rex's command palette picks; its action sends back a device command.
+  function pickDevice() {
+    if (picking) return;
+    const fail = (text) => {
+      pickNotice = text;
+      redraw();
+    };
+    if (!process.env.REX_BLOCK) return fail(OUTSIDE_REX);
+    picking = true;
+    let stderr = "";
+    const child = spawn("rex", ["do", "sim_devices"], { stdio: ["ignore", "ignore", "pipe"] });
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("error", (e) => {
+      picking = false;
+      fail(e.code === "ENOENT" ? OUTSIDE_REX : e.message);
+    });
+    child.on("close", (code) => {
+      if (!picking) return;
+      picking = false;
+      if (code === 0) return;
+      const why = stderr.split("\n").map((l) => l.trim()).filter(Boolean).pop();
+      fail(why?.replace(/^Error: (rex-sim: )?/, "") ?? `rex do sim_devices exited with ${code}`);
+    });
   }
 
   const COMMANDS = {
@@ -149,9 +155,14 @@ export async function run({ device: deviceArg }) {
     "volume-down": () => input()?.volume("down"),
     rotate: () => input()?.rotate(),
     keyboard: () => input()?.softwareKeyboard?.(),
-    repair: () => canRepair(target()) && repair(target()),
-    devices: () => openPicker(),
+    repair: () => {
+      if (!canRepair(target())) return;
+      repairing = target().id;
+      stopStream();
+      nudge();
+    },
     device: async (id) => {
+      pickNotice = null;
       devices = await listDevices();
       const d = devices.find((d) => d.id === id);
       if (!d) show({ kind: "error", text: `No device with id ${id}.` });
@@ -174,17 +185,7 @@ export async function run({ device: deviceArg }) {
 
   const actions = {
     command: (name, arg) => COMMANDS[name]?.(arg),
-    togglePicker: () => {
-      if (!picker) return openPicker();
-      picker = null;
-      redraw();
-    },
-    pick,
-    repair,
-    moveCursor: (delta) => {
-      picker.cursor = moveCursor(pickerEntries(picker.devices, target()), picker.cursor, delta);
-      redraw();
-    },
+    pickDevice,
     touch: (p) => {
       const i = input();
       if (!i) return;
@@ -205,17 +206,9 @@ export async function run({ device: deviceArg }) {
     hit(regions, e)?.run(e);
   }
 
-  function onPickerKey(key) {
-    if (key === "\x1b" || key === "\x10") return actions.togglePicker();
-    if (key === "up" || key === "k") return actions.moveCursor(-1);
-    if (key === "down" || key === "j") return actions.moveCursor(1);
-    if (key === "\r") pickerEntries(picker.devices, target())[picker.cursor]?.select?.(actions);
-  }
-
   function onKey(key) {
     if (key === "\x03") return quit();
-    if (picker) return onPickerKey(key);
-    if (key === "\x10") return openPicker();
+    if (key === "\x10") return pickDevice();
     const i = input();
     const k = i && keyUsage(key);
     if (!k) return;
@@ -230,10 +223,7 @@ export async function run({ device: deviceArg }) {
       if (e.type === "mouse") onMouse(e);
       else if (e.type === "key") onKey(e.key);
       else if (e.type === "command") actions.command(e.name, e.arg);
-      else if (e.type === "color") {
-        colors = { ...colors, [e.slot]: e.rgb };
-        redraw();
-      } else if (e.type === "report" && e.kind === 6) {
+      else if (e.type === "report" && e.kind === 6) {
         metrics = { cellWidth: e.width, cellHeight: e.height };
         relayout();
         redraw();
@@ -277,7 +267,7 @@ export async function run({ device: deviceArg }) {
       }
       const { session, bytes } = latest;
       latest = null;
-      if (view.session !== session || picker || paused || !metrics) continue;
+      if (view.session !== session || paused || !metrics) continue;
       const size = imageSize(bytes);
       if (!size) continue;
       if (size.width !== frameSize?.width || size.height !== frameSize?.height) {
@@ -288,7 +278,7 @@ export async function run({ device: deviceArg }) {
       const rect = geometry.screen;
       if (!rect) continue;
       const pixels = await sharp(bytes).resize(rect.width, rect.height, { fit: "fill" }).ensureAlpha().raw().toBuffer();
-      if (view.session !== session || picker || paused || rect !== geometry.screen) continue;
+      if (view.session !== session || paused || rect !== geometry.screen) continue;
       for (let i = 0; i < mask.offsets.length; i++) pixels[mask.offsets[i]] = mask.alphas[i];
       await screen.drawFrame(pixels, rect);
     }

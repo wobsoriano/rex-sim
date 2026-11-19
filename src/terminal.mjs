@@ -21,9 +21,9 @@ export function leave() {
   process.stdin.pause();
 }
 
-// Asks for the default colors and the cell size in pixels.
+// Asks for the cell size in pixels.
 export function requestMetrics() {
-  out.write(`${ESC}]10;?${ESC}\\${ESC}]11;?${ESC}\\${ESC}[16t`);
+  out.write(`${ESC}[16t`);
 }
 
 const NAMED = { A: "up", B: "down", C: "right", D: "left", H: "home", F: "end" };
@@ -58,9 +58,6 @@ export class InputParser {
           const [name, ...arg] = body.slice(8).split(";");
           yield { type: "command", name, arg: arg.length ? arg.join(";") : null };
         }
-      } else if ((m = /^\x1b\](1[01]);rgb:([0-9a-f]+)\/([0-9a-f]+)\/([0-9a-f]+)(?:\x07|\x1b\\)/i.exec(s))) {
-        const rgb = m.slice(2, 5).map((h) => Math.round((parseInt(h, 16) / (16 ** h.length - 1)) * 255));
-        yield { type: "color", slot: m[1] === "10" ? "foreground" : "background", rgb };
       } else if ((m = /^\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/.exec(s))) {
         // Another reply we don't use.
       } else if ((m = /^\x1b\[(\d+);(\d+);(\d+)t/.exec(s))) {

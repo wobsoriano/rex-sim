@@ -41,11 +41,9 @@ test("sequences split across chunks are joined", () => {
   ]);
 });
 
-test("terminal replies: cell size, colors and graphics errors", () => {
-  assert.deepEqual(parse("\x1b[6;28;14t\x1b]10;rgb:ffff/8080/0000\x1b\\\x1b]11;rgb:00/00/00\x07\x1b_Gi=1;ENOENT:no file\x1b\\"), [
+test("terminal replies: cell size and graphics errors; other replies are dropped", () => {
+  assert.deepEqual(parse("\x1b[6;28;14t\x1b]11;rgb:00/00/00\x07\x1b_Gi=1;ENOENT:no file\x1b\\"), [
     { type: "report", kind: 6, height: 28, width: 14 },
-    { type: "color", slot: "foreground", rgb: [255, 128, 0] },
-    { type: "color", slot: "background", rgb: [0, 0, 0] },
     { type: "graphics", reply: "i=1;ENOENT:no file" },
   ]);
 });

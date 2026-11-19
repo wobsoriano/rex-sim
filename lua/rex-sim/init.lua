@@ -221,6 +221,24 @@ function M.open_url(ctx, args)
   return { block_id = pane.block_id, url = url }
 end
 
+-- Repairing restarts SpringBoard, so it asks first. A Rex that can't ask
+-- repairs straight away.
+function M.repair(ctx)
+  local pane = open_pane(ctx)
+  if rex.ui and rex.ui.pick then
+    local id, why, detail = rex.ui.pick{
+      title = "Repair simulator input?",
+      items = { { id = "repair", title = "Repair input", subtitle = "Restarts SpringBoard, so open apps close" } },
+    }
+    if id == nil then
+      if why == "cancelled" then return end
+      fail("couldn't ask before repairing: " .. (detail or why))
+    end
+  end
+  send(pane.block_id, "repair")
+  return { block_id = pane.block_id }
+end
+
 function M.setup(opts)
   for k, v in pairs(opts or {}) do
     if DEFAULTS[k] == nil then
@@ -261,7 +279,8 @@ function M.setup(opts)
     function(ctx, args) return M.open_url(ctx, args) end, { url = "string?" })
   action("sim_keyboard", "Simulator: Toggle Software Keyboard", "Show or hide the iOS on-screen keyboard.", command_action("keyboard"))
   action("sim_repair", "Simulator: Repair Input",
-    "For when taps on an iOS simulator do nothing. Restarts SpringBoard, so open apps close.", command_action("repair"))
+    "For when taps on an iOS simulator do nothing. Restarts SpringBoard, so open apps close.",
+    function(ctx) return M.repair(ctx) end)
 
   for short, key in pairs(M.options.keys or {}) do
     rex.bind(key, "sim_" .. short)

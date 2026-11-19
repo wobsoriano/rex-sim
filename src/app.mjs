@@ -206,11 +206,11 @@ export async function run({ device: deviceArg }) {
       redraw();
     },
     device: async (id) => {
-      failure = null;
       devices = await listDevices();
       const d = devices.find((d) => d.id === id);
-      if (!d) show({ kind: "error", text: `No device with id ${id}.` });
-      else if (d.unusable) show({ kind: "error", text: `${d.name}: ${d.unusable}.` });
+      // A device that can't be shown leaves the current one streaming.
+      failure = !d ? `No device with id ${id}.` : d.unusable ? `${d.name}: ${d.unusable}.` : null;
+      if (failure) redraw();
       else pick(d);
     },
     pause: () => {

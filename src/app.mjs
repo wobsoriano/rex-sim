@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { promisify } from "node:util";
 import sharp from "sharp";
 import { canRepair, listDevices, platformOf } from "./devices.mjs";
 import { imageSize } from "./frames.mjs";
@@ -51,7 +52,25 @@ function cornerMask(width, height, radius) {
   return { offsets, alphas };
 }
 
+// A pane started by hand takes the label the Lua actions look for, and gets
+// its own back when rex-sim quits.
+async function claimLabel() {
+  const block = process.env.REX_BLOCK;
+  const rex = (...args) => promisify(execFile)("rex", args);
+  const keep = () => {};
+  if (!block) return keep;
+  try {
+    const { label } = JSON.parse((await rex("block", "inspect", block, "--json")).stdout).block;
+    if (label === "rex-sim") return keep;
+    await rex("block", "rename", block, "rex-sim");
+    return () => rex("block", "rename", block, label ?? "").catch(keep);
+  } catch {
+    return keep;
+  }
+}
+
 export async function run({ device: deviceArg }) {
+  const label = claimLabel();
   const screen = new Screen();
   const parser = new InputParser();
   const booting = new Set();
@@ -276,6 +295,7 @@ export async function run({ device: deviceArg }) {
     stopStream();
     process.stdout.write(programStatus("clear"));
     leave();
+    await (await label)();
     const prefix = `tty-graphics-protocol-rex-sim-${process.pid}-`;
     for (const name of await readdir("/tmp")) if (name.startsWith(prefix)) await rm(`/tmp/${name}`, { force: true });
     process.exit(0);

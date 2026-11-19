@@ -147,6 +147,45 @@ function M.toggle(ctx, args)
   return { block_id = pane.block_id, state = state }
 end
 
+-- Config actions run without the login shell's PATH, so the list comes
+-- through that shell, which finds the same node the pane runs.
+local function list_devices()
+  local r = check(rex.exec({
+    os.getenv("SHELL") or "/bin/zsh", "-lc", 'exec "$0" "$@"', M.options.node, ROOT .. "/bin/rex-sim.mjs", "--list",
+  }, { timeout = 20 }))
+  if r.timed_out then fail("listing devices took too long") end
+  if not r.ok then
+    local why = r.stderr:match("^%s*(.-)%s*$")
+    fail(why ~= "" and why or "listing devices failed")
+  end
+  return check(rex.json.decode(r.stdout))
+end
+
+-- Asks for a device in the command palette, running ones first, and shows it
+-- in the pane, opening one if none is open.
+function M.pick(ctx)
+  if not (rex.ui and rex.ui.pick) then fail("needs Rex 2042+. Restart Rex after updating.") end
+  local devices = list_devices()
+  if #devices == 0 then fail("No simulators or emulators. Create one in Xcode or Android Studio.") end
+  local items = {}
+  for _, running in ipairs({ true, false }) do
+    for _, d in ipairs(devices) do
+      if (d.booted == true) == running then
+        items[#items + 1] = { id = d.id, title = d.name, subtitle = d.os, detail = d.unusable or (d.booted and "Running") or nil }
+      end
+    end
+  end
+  local id, why, detail = rex.ui.pick{ title = "Show device", placeholder = "Filter devices", items = items }
+  if id == nil then
+    if why == "cancelled" then return end
+    fail("couldn't show the device picker: " .. (detail or why))
+  end
+  local pane = locate(ctx)
+  if not pane then return M.open(ctx, { device = id }) end
+  send(pane.block_id, "device;" .. id)
+  return { block_id = pane.block_id, device = id }
+end
+
 -- Sends a command to the pane from wherever you are.
 local function command_action(command)
   return function(ctx)
@@ -181,7 +220,9 @@ function M.setup(opts)
     function(ctx, args) return M.open(ctx, args) end, { device = "string?", placement = "string?" })
   action("sim_close", "Simulator: Close", "Close the simulator pane.",
     function(ctx) return M.close(ctx) end)
-  action("sim_devices", "Simulator: Pick Device", "Open the device picker in the simulator pane.", command_action("devices"))
+  action("sim_devices", "Simulator: Pick Device",
+    "Pick an iOS simulator or Android emulator to show, opening a pane if none is open.",
+    function(ctx) return M.pick(ctx) end)
   action("sim_device", "Simulator: Show Device",
     "Show a device in the simulator pane, booting it if it is off. Takes a simulator's UDID or avd:<name>.",
     function(ctx, args) return command_action("device;" .. args.device)(ctx) end, { device = "string" })
